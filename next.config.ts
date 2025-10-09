@@ -1,7 +1,8 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  turbopack: {
+    root: '.', // tvinga Turbopack att använda projektroten
+  },
 };
+module.exports = nextConfig;
 
-export default nextConfig;
