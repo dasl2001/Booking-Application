@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  turbopack: {
-    root: '.', // tvinga Turbopack att använda projektroten
-  },
+  turbopack: { root: '.' },
 };
 module.exports = nextConfig;
+
 

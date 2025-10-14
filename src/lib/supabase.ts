@@ -20,3 +20,6 @@ export function supaAdmin() {
   return createClient(url, key);
 }
 
+
+
+
