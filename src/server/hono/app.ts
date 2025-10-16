@@ -3,7 +3,7 @@ import type { Vars } from "./types";
 
 export const app = new Hono<{ Variables: Vars }>()
   .basePath("/api"); // /auth -> /api/auth osv
-  app.get("/my/properties", (c) => c.redirect("/api/properties/my", 308));
+  //app.get("/my/properties", (c) => c.redirect("/api/properties/my", 308));
 
 // Global errorformatter
 app.onError((err, c) => {
