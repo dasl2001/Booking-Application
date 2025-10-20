@@ -1,13 +1,31 @@
-export async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers || {});
-  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+// src/lib/api.ts
+export async function api<T = any>(
+  url: string,
+  init: RequestInit & { json?: any } = {}
+): Promise<T> {
+  const { json, headers, ...rest } = init;
 
-  const res = await fetch(url, { ...init, headers, credentials: "include" });
+  const res = await fetch(url, {
+    credentials: "include",      // 👈 viktigt för httpOnly-cookies
+    cache: "no-store",           // undvik cachead auth-status
+    headers: {
+      "Content-Type": "application/json",
+      ...(headers || {}),
+    },
+    ...(json ? { body: JSON.stringify(json) } : {}),
+    ...rest,
+  });
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `HTTP ${res.status}`);
+    let msg = `Request failed (${res.status})`;
+    try {
+      const data = await res.json();
+      if (data?.error) msg = data.error;
+    } catch {}
+    throw new Error(msg);
   }
   return res.json();
 }
+
 
 

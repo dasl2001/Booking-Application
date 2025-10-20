@@ -1,43 +1,47 @@
 "use client";
-import { useState } from "react";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
 const clean = (s: string) =>
   s.normalize("NFKC").replace(/[\u200B-\u200D\u2060\u00A0]/g, "").trim();
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
 
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg("");
+
+    const payload = {
+      name: clean(name),
+      email: clean(email).toLowerCase(),
+      password: clean(password),
+    };
+
+    try {
+      await api("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      startTransition(() => router.push("/auth/login?registered=1"));
+    } catch (e: any) {
+      setMsg(e?.message || "Något gick fel vid registrering.");
+    }
+  }
+
   return (
     <main className="max-w-sm mx-auto p-6 space-y-4">
       <h1 className="text-2xl font-bold">Skapa konto</h1>
-      <form
-        className="space-y-3"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setMsg("");
-          try {
-            const payload = {
-              name: clean(name),
-              email: clean(email).toLowerCase(),
-              password: clean(password),
-            };
-            await api("/api/auth/register", {
-              method: "POST",
-              body: JSON.stringify(payload),
-            });
-            setMsg("Konto skapat! Kolla din e-post för verifiering och logga sedan in.");
-            setName("");
-            setEmail("");
-            setPassword("");
-          } catch (e: any) {
-            setMsg(e.message || "Något gick fel");
-          }
-        }}
-      >
+
+      <form className="space-y-3" onSubmit={onSubmit}>
         <input
           className="border rounded px-3 py-2 w-full"
           placeholder="Namn"
@@ -65,11 +69,19 @@ export default function RegisterPage() {
           onChange={(e) => setPassword(e.target.value)}
           required
         />
-        <button className="px-3 py-2 rounded-full bg-rose-600 text-white w-full">
-          Registrera
+
+        <button
+          className="px-3 py-2 rounded-full bg-rose-600 text-white w-full disabled:opacity-60 hover:bg-rose-700"
+          disabled={pending}
+          type="submit"
+        >
+          {pending ? "Skapar konto…" : "Registrera"}
         </button>
+
         {msg && <p className="text-sm text-rose-600">{msg}</p>}
       </form>
     </main>
   );
 }
+
+

@@ -109,6 +109,106 @@ bookings.post("/", zValidator("json", bookingCreate), async (c) => {
   return c.json({ booking: data }, 201);
 });
 
+// ✨ Redigera (uppdatera datum för) egen bokning
+bookings.patch("/:id", async (c) => {
+  const unauth = requireAuth(c);
+  if (unauth) return unauth;
+
+  const db = c.get("supa");
+  const auth = c.get("authUser")!;
+  const user_id = await currentUserId(db, auth.id);
+  const { id } = c.req.param();
+
+  // Läs body och basvalidera
+  const body = await c.req.json().catch(() => null);
+  const check_in_date: string | undefined = body?.check_in_date;
+  const check_out_date: string | undefined = body?.check_out_date;
+  if (!check_in_date || !check_out_date) {
+    return c.json({ error: "check_in_date och check_out_date krävs." }, 400);
+  }
+
+  // Hämta bokningen + property
+  const { data: booking, error: bErr } = await db
+    .from("bookings")
+    .select("id, user_id, property_id")
+    .eq("id", id)
+    .single();
+  if (bErr || !booking) return c.json({ error: "Bokningen finns inte" }, 404);
+  if (booking.user_id !== user_id)
+    return c.json({ error: "Du saknar behörighet att ändra denna bokning." }, 403);
+
+  const { data: prop, error: pErr } = await db
+    .from("properties")
+    .select("price_per_night")
+    .eq("id", booking.property_id)
+    .single();
+  if (pErr || !prop) return c.json({ error: "Property saknas för bokningen." }, 400);
+
+  // A) global overlap per user (exkludera denna)
+  {
+    const { data: myOverlap, error: myOvErr } = await db
+      .from("bookings")
+      .select("id")
+      .eq("user_id", user_id)
+      .neq("id", id)
+      .not("check_out_date", "lte", check_in_date)
+      .not("check_in_date", "gte", check_out_date);
+    if (myOvErr) return c.json({ error: myOvErr.message }, 400);
+    if (myOverlap && myOverlap.length > 0)
+      return c.json({ error: "Du har redan en bokning som överlappar dessa datum." }, 400);
+  }
+
+  // B) overlap på samma property (exkludera denna)
+  {
+    const { data: overlaps, error: ovErr } = await db
+      .from("bookings")
+      .select("id")
+      .eq("property_id", booking.property_id)
+      .neq("id", id)
+      .not("check_out_date", "lte", check_in_date)
+      .not("check_in_date", "gte", check_out_date);
+    if (ovErr) return c.json({ error: ovErr.message }, 400);
+    if (overlaps && overlaps.length > 0)
+      return c.json({ error: "Datumen är redan bokade för detta boende." }, 400);
+  }
+
+  // C) vecko-skydd (exkludera denna)
+  {
+    const weekStartStr = weekStart(check_in_date);
+    const weekEndStr = weekEnd(check_out_date);
+
+    const { data: w, error: wuErr } = await db
+      .from("bookings")
+      .select("id")
+      .eq("user_id", user_id)
+      .neq("id", id)
+      .not("check_out_date", "lte", weekStartStr)
+      .not("check_in_date", "gte", weekEndStr);
+    if (wuErr) return c.json({ error: wuErr.message }, 400);
+    if (w && w.length > 0)
+      return c.json({ error: "Du har redan en bokning samma vecka." }, 400);
+  }
+
+  // Räkna om pris
+  const total_price = calcTotalPrice(
+    Number(prop.price_per_night),
+    check_in_date,
+    check_out_date
+  );
+
+  // Uppdatera
+  const { data: updated, error: uErr } = await db
+    .from("bookings")
+    .update({ check_in_date, check_out_date, total_price })
+    .eq("id", id)
+    .eq("user_id", user_id)
+    .select("*, properties(*)")
+    .single();
+
+  if (uErr) return c.json({ error: uErr.message }, 400);
+  return c.json({ booking: updated });
+});
+
 // Ta bort egen bokning
 bookings.delete("/:id", async (c) => {
   const unauth = requireAuth(c);
