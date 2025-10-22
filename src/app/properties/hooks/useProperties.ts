@@ -12,7 +12,21 @@ export type MyProperty = {
   availability: boolean;
   image_url?: string | null;
 };
+
 export type WithBooked = MyProperty & { is_booked?: boolean };
+
+// Hjälpare: säkert konvertera okänt värde till number|null
+function toNullableNumber(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
 
 export function useProperties() {
   const [items, setItems] = useState<WithBooked[]>([]);
@@ -36,8 +50,8 @@ export function useProperties() {
         })
       );
       setItems(withFlags);
-    } catch (e: any) {
-      setMsg(e?.message || "Kunde inte hämta dina boenden.");
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : "Kunde inte hämta dina boenden.");
     }
   }, []);
 
@@ -60,29 +74,19 @@ export function useProperties() {
         setMsg("Namn är obligatoriskt.");
         return;
       }
-      if (
-        payload.price_per_night !== null &&
-        (Number.isNaN(payload.price_per_night) || payload.price_per_night < 0)
-      ) {
+      if (payload.price_per_night !== null && (Number.isNaN(payload.price_per_night) || payload.price_per_night < 0)) {
         setMsg("Pris per natt måste vara ett icke-negativt tal.");
         return;
       }
 
-      const res = await fetch("/api/properties", {
+      await api("/api/properties", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        json: payload,
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setMsg(data?.error || "Kunde inte skapa boendet.");
-        return;
-      }
-
       await load();
-    } catch (e: any) {
-      setMsg(e?.message ?? "Något gick fel vid skapande.");
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : "Något gick fel vid skapande.");
     } finally {
       setBusy(false);
     }
@@ -94,14 +98,21 @@ export function useProperties() {
       const prev = items;
       setItems((xs) => xs.filter((p) => p.id !== id)); // optimistiskt
 
-      const res = await fetch(`/api/properties/${id}`, { method: "DELETE" });
-      if (!res.ok) {
+      const res = await api<{ ok: true } | { error: string }>(`/api/properties/${id}`, {
+        method: "DELETE",
+      }).catch(async (e: unknown) => {
+        // api() kastar Error vid !ok, rulla tillbaka
         setItems(prev);
-        const data = await res.json().catch(() => ({}));
-        setMsg(data?.error || "Kunde inte ta bort boendet.");
+        throw e;
+      });
+
+      if (!("ok" in res)) {
+        // borde inte hända med vår api-helper, men skydd ifall
+        setItems(prev);
+        setMsg("Kunde inte ta bort boendet.");
       }
-    } catch (e: any) {
-      setMsg(e?.message || "Nätverksfel vid borttagning.");
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : "Nätverksfel vid borttagning.");
     }
   }
 
@@ -109,26 +120,23 @@ export function useProperties() {
     if (!editId) return;
 
     try {
-      if (!editData.name?.trim()) {
+      const name = (editData.name ?? "").toString().trim();
+      if (!name) {
         setMsg("Namn är obligatoriskt.");
         return;
       }
-      if (
-        editData.price_per_night != null &&
-        (Number.isNaN(Number(editData.price_per_night)) || Number(editData.price_per_night) < 0)
-      ) {
+
+      const price = toNullableNumber(editData.price_per_night as unknown);
+      if (price !== null && (Number.isNaN(price) || price < 0)) {
         setMsg("Pris per natt måste vara ett icke-negativt tal.");
         return;
       }
 
       const payload = {
-        name: editData.name?.trim(),
+        name,
         description: (editData.description ?? "").toString().trim() || null,
         location: (editData.location ?? "").toString().trim() || null,
-        price_per_night:
-          editData.price_per_night == null || editData.price_per_night === ("" as any)
-            ? null
-            : Number(editData.price_per_night),
+        price_per_night: price,
         availability: Boolean(editData.availability),
         image_url: (editData.image_url ?? "").toString().trim() || null,
       };
@@ -136,23 +144,17 @@ export function useProperties() {
       // optimistisk uppdatering
       setItems((xs) => xs.map((p) => (p.id === editId ? { ...p, ...payload } : p)));
 
-      const res = await fetch(`/api/properties/${editId}`, {
+      await api(`/api/properties/${editId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        json: payload,
       });
-
-      if (!res.ok) {
-        await load(); // rulla tillbaka till serverns sanning
-        const data = await res.json().catch(() => ({}));
-        setMsg(data?.error || "Kunde inte spara ändringarna.");
-        return;
-      }
 
       setEditId(null);
       setEditData({});
-    } catch (e: any) {
-      setMsg(e?.message || "Nätverksfel vid sparande.");
+    } catch (err: unknown) {
+      // rulla tillbaka till serverns sanning
+      await load();
+      setMsg(err instanceof Error ? err.message : "Kunde inte spara ändringarna.");
     }
   }
 

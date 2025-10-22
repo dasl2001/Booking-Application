@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Guard from "../components/Guard";
 import { api } from "@/lib/api";
@@ -21,8 +22,8 @@ export default function DiscoverPage() {
       try {
         const d = await api<{ properties: Prop[] }>("/api/properties/others");
         setItems(d.properties);
-      } catch (e: any) {
-        setMsg(e.message || "Kunde inte hämta boenden.");
+      } catch (err: unknown) {
+        setMsg(err instanceof Error ? err.message : "Kunde inte hämta boenden.");
       }
     })();
   }, []);
@@ -40,14 +41,20 @@ export default function DiscoverPage() {
             {items.map((p) => (
               <li key={p.id} className="border rounded-2xl p-4 bg-white shadow-sm space-y-3">
                 {p.image_url ? (
-                  <img src={p.image_url} alt={p.name} className="w-full h-40 object-cover rounded-xl" />
+                  <img
+                    src={p.image_url}
+                    alt={p.name}
+                    className="w-full h-40 object-cover rounded-xl"
+                  />
                 ) : (
                   <div className="w-full h-40 bg-gray-100 rounded-xl grid place-items-center text-gray-400">
                     Ingen bild
                   </div>
                 )}
                 <h2 className="font-semibold text-gray-900">{p.name}</h2>
-                <p className="text-sm text-gray-600 line-clamp-3">{p.description || "Ingen beskrivning"}</p>
+                <p className="text-sm text-gray-600 line-clamp-3">
+                  {p.description || "Ingen beskrivning"}
+                </p>
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{p.price_per_night} kr / natt</span>
                   <a

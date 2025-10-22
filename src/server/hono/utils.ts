@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { Vars } from "./types";
+import type { SupabaseClient } from "@supabase/supabase-js"; // 👈 lägg till denna rad
 
 export const isDev = process.env.NODE_ENV !== "production";
 
@@ -17,6 +18,7 @@ export function weekStart(dateStr: string) {
   d.setDate(d.getDate() - diffToMon);
   return isoDate(d);
 }
+
 export function weekEnd(dateStr: string) {
   const start = new Date(weekStart(dateStr) + "T00:00:00");
   start.setDate(start.getDate() + 6);
@@ -29,8 +31,19 @@ export function requireAuth(c: Context<{ Variables: Vars }>) {
   return null;
 }
 
-export async function currentUserId(db: any, authUserId: string): Promise<string> {
-  const { data, error } = await db.from("users").select("id").eq("auth_user_id", authUserId).single();
-  if (error || !data) throw new Error("User mapping missing");
+export async function currentUserId(
+  db: SupabaseClient,
+  authUserId: string
+): Promise<string> {
+  const { data, error } = await db
+    .from("users")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .single();
+
+  if (error || !data) {
+    throw new Error("User mapping missing");
+  }
   return data.id as string;
 }
+

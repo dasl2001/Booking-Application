@@ -1,34 +1,54 @@
+// app/components/Navbar.tsx (eller din path)
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 
 export default function Navbar() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const pathname = usePathname();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const d = await api<{ user: { id: string } | null }>("/api/auth/me");
-        setLoggedIn(!!d.user);
-      } catch {
-        setLoggedIn(false);
-      }
-    })();
+  const loadMe = useCallback(async () => {
+    try {
+      const d = await api<{ user: { id: string } | null }>("/api/auth/me");
+      setLoggedIn(!!d.user);
+    } catch {
+      setLoggedIn(false);
+    }
   }, []);
 
-  const handleLogout = async () => {
-  await api("/api/auth/logout", { method: "POST" });
-  location.href = "/auth/login"; // full reload
-};
+  useEffect(() => {
+    // ladda vid mount och varje route-byte
+    void loadMe();
+  }, [loadMe, pathname]);
 
+  useEffect(() => {
+    // lyssna på auth-signal (login/logout) från andra komponenter/flikar
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "auth:event") void loadMe();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [loadMe]);
+
+  const handleLogout = async () => {
+    await api("/api/auth/logout", { method: "POST" });
+
+    // 🔔 signalera logout
+    try {
+      localStorage.setItem("auth:event", `logout:${Date.now()}`);
+    } catch {}
+
+    // full reload (enklaste sättet att garantera ren state)
+    location.href = "/auth/login";
+  };
 
   return (
     <nav className="flex items-center justify-between px-6 py-3 border-b bg-white">
       {loggedIn ? (
         <>
-          {/* Vänster sida – logga + länkar */}
           <div className="flex items-center gap-6">
             <Link href="/" className="font-bold text-lg text-gray-900">
               BnB
@@ -43,28 +63,16 @@ export default function Navbar() {
               Bokning
             </Link>
           </div>
-
-          {/* Höger sida – logga ut */}
-          <button
-            onClick={handleLogout}
-            className="text-sm text-rose-600 hover:underline"
-          >
+          <button onClick={handleLogout} className="text-sm text-rose-600 hover:underline">
             Logga ut
           </button>
         </>
       ) : (
-        // Om ej inloggad
         <div className="flex items-center gap-4 ml-auto">
-          <Link
-            href="/auth/login"
-            className="text-sm font-medium text-rose-600 hover:underline"
-          >
+          <Link href="/auth/login" className="text-sm font-medium text-rose-600 hover:underline">
             Logga in
           </Link>
-          <Link
-            href="/auth/register"
-            className="text-sm font-medium text-rose-600 hover:underline"
-          >
+          <Link href="/auth/register" className="text-sm font-medium text-rose-600 hover:underline">
             Registrera
           </Link>
         </div>
@@ -72,3 +80,4 @@ export default function Navbar() {
     </nav>
   );
 }
+

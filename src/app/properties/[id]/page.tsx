@@ -14,8 +14,11 @@ export default function PropertyDetailPage() {
       try {
         const r = await api<{ is_booked: boolean }>(`/api/properties/${id}/is-booked`);
         setIsBooked(r.is_booked);
-      } catch (e: any) {
-        setMsg(e.message || "Kunde inte läsa bokningsstatus.");
+      } catch (e: unknown) {
+        if (e instanceof Error ) {
+                setMsg(e.message || "Kunde inte läsa bokningsstatus.");
+        }
+
       }
     })();
   }, [id]);

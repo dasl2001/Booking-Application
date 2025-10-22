@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
 const clean = (s: string) =>
   s.normalize("NFKC").replace(/[\u200B-\u200D\u2060\u00A0]/g, "").trim();
 
-export default function RegisterPage() {
+export default function LoginClient() {
+  const qp = useSearchParams();
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const justRegistered = qp.get("registered") === "1";
 
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
@@ -19,40 +19,40 @@ export default function RegisterPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setMsg("");
-
-    const payload = {
-      name: clean(name),
-      email: clean(email).toLowerCase(),
-      password: clean(password),
-    };
-
     try {
-      await api("/api/auth/register", {
+      await api("/api/auth/login", {
         method: "POST",
-        json: payload, // 👈 använd api-helperns json-nyckel, inte body
+        json: {
+          email: clean(email).toLowerCase(),
+          password: clean(password),
+        },
       });
-      startTransition(() => router.push("/auth/login?registered=1"));
+
+      // 🔔 signalera auth-ändring till andra flikar/komponenter
+      try {
+        localStorage.setItem("auth:event", `login:${Date.now()}`);
+      } catch {}
+
+      // 🔄 navigera och tvinga omritning av layouts/server-data
+      router.replace("/");
+      router.refresh();
+
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setMsg(err.message);
-      } else {
-        setMsg("Något gick fel vid registrering.");
-      }
+      setMsg(err instanceof Error ? err.message : "Fel vid inloggning");
     }
   }
 
   return (
     <main className="max-w-sm mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Skapa konto</h1>
+      <h1 className="text-2xl font-bold text-center">Logga in</h1>
+
+      {justRegistered && (
+        <p className="text-sm rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2">
+          Konto skapat! Logga in för att fortsätta.
+        </p>
+      )}
 
       <form className="space-y-3" onSubmit={onSubmit}>
-        <input
-          className="border rounded px-3 py-2 w-full"
-          placeholder="Namn"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
         <input
           className="border rounded px-3 py-2 w-full"
           type="email"
@@ -65,21 +65,21 @@ export default function RegisterPage() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
+
         <input
           className="border rounded px-3 py-2 w-full"
           type="password"
-          placeholder="Lösenord (min 6 tecken)"
+          placeholder="Lösenord"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
 
         <button
-          className="px-3 py-2 rounded-full bg-rose-600 text-white w-full disabled:opacity-60 hover:bg-rose-700"
-          disabled={pending}
+          className="px-3 py-2 rounded-full bg-rose-600 text-white w-full hover:bg-rose-700"
           type="submit"
         >
-          {pending ? "Skapar konto …" : "Registrera"}
+          Logga in
         </button>
 
         {msg && <p className="text-sm text-rose-600">{msg}</p>}
