@@ -146,6 +146,22 @@ properties.delete("/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// 🔹 Ny: Hämta en specifik property
+properties.get("/:id", async (c) => {
+  const db = c.get("supa");
+  const { id } = c.req.param();
+
+  const { data, error } = await db
+    .from("properties")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) return c.json({ error: "Property not found" }, 404);
+
+  return c.json({ property: data });
+});
+
 // Query-schema för /:id/is-booked
 const isBookedQuery = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

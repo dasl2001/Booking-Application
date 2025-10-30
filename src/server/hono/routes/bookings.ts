@@ -7,7 +7,7 @@ import type { Vars } from "../types";
 
 export const bookings = new Hono<{ Variables: Vars }>();
 
-// Mina bokningar (med den associerade propertyn)
+// ---- Hämta alla egna bokningar ----
 bookings.get("/", async (c) => {
   const unauth = requireAuth(c);
   if (unauth) return unauth;
@@ -21,11 +21,36 @@ bookings.get("/", async (c) => {
     .select("*, properties(*)")
     .eq("user_id", user_id)
     .order("created_at", { ascending: false });
+
   if (error) return c.json({ error: error.message }, 400);
   return c.json({ bookings: data });
 });
 
-// Skapa bokning
+// ---- Hämta en specifik (egen) bokning ----
+bookings.get("/:id", async (c) => {
+  const unauth = requireAuth(c);
+  if (unauth) return unauth;
+
+  const db = c.get("supa");
+  const auth = c.get("authUser")!;
+  const user_id = await currentUserId(db, auth.id);
+  const id = c.req.param("id");
+
+  const { data, error } = await db
+    .from("bookings")
+    .select("*, properties(*)")
+    .eq("id", id)
+    .eq("user_id", user_id)
+    .single();
+
+  if (error || !data) {
+    return c.json({ error: "Bokningen finns inte" }, 404);
+  }
+
+  return c.json({ booking: data });
+});
+
+// ---- Skapa ny bokning ----
 bookings.post("/", zValidator("json", bookingCreate), async (c) => {
   const unauth = requireAuth(c);
   if (unauth) return unauth;
@@ -41,6 +66,7 @@ bookings.post("/", zValidator("json", bookingCreate), async (c) => {
     .select("price_per_night, owner_id")
     .eq("id", property_id)
     .single();
+
   if (pe || !prop) return c.json({ error: "Property not found" }, 404);
 
   if (prop.owner_id === user_id)
@@ -105,11 +131,12 @@ bookings.post("/", zValidator("json", bookingCreate), async (c) => {
     })
     .select("*, properties(*)")
     .single();
+
   if (error) return c.json({ error: error.message }, 400);
   return c.json({ booking: data }, 201);
 });
 
-// ✨ Redigera (uppdatera datum för) egen bokning
+// ---- Uppdatera egen bokning ----
 bookings.patch("/:id", async (c) => {
   const unauth = requireAuth(c);
   if (unauth) return unauth;
@@ -119,15 +146,13 @@ bookings.patch("/:id", async (c) => {
   const user_id = await currentUserId(db, auth.id);
   const { id } = c.req.param();
 
-  // Läs body och basvalidera
   const body = await c.req.json().catch(() => null);
   const check_in_date: string | undefined = body?.check_in_date;
   const check_out_date: string | undefined = body?.check_out_date;
-  if (!check_in_date || !check_out_date) {
+  if (!check_in_date || !check_out_date)
     return c.json({ error: "check_in_date och check_out_date krävs." }, 400);
-  }
 
-  // Hämta bokningen + property
+  // Hämta bokning + property
   const { data: booking, error: bErr } = await db
     .from("bookings")
     .select("id, user_id, property_id")
@@ -209,7 +234,7 @@ bookings.patch("/:id", async (c) => {
   return c.json({ booking: updated });
 });
 
-// Ta bort egen bokning
+// ---- Ta bort egen bokning ----
 bookings.delete("/:id", async (c) => {
   const unauth = requireAuth(c);
   if (unauth) return unauth;
